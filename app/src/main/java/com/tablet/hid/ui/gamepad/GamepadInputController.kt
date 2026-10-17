@@ -30,9 +30,22 @@ class GamepadInputController(
         binding.leftJoystick.listener = JoystickView.JoystickListener { nx, ny ->
             state.leftX = (nx * 32767).toInt(); state.leftY = (ny * 32767).toInt(); state.sendReport()
         }
-        binding.rightJoystick.listener = JoystickView.JoystickListener { nx, ny ->
-            state.rightX = (nx * 32767).toInt(); state.rightY = (ny * 32767).toInt(); state.sendReport()
+        
+         binding.rightJoystick.listener = JoystickView.JoystickListener { nx, ny ->
+             val moving = kotlin.math.abs(nx) > 0.02f ||
+                 kotlin.math.abs(ny) > 0.02f
+
+        viewModel.sendMouseReport(
+                 buttons = if (moving) 1 else 0,
+            dx = nx * 8f,
+            dy = ny * 8f
+        )
+
+            state.rightX = 0
+            state.rightY = 0
+            state.sendReport()
         }
+
     }
 
     fun toggleSingleJoystickOutputSide() {
