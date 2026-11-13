@@ -18,6 +18,7 @@ import com.tablet.hid.model.ClickBehavior
 import com.tablet.hid.model.JoystickSide
 import com.tablet.hid.model.TriggerDragAxis
 import com.tablet.hid.util.HapticFeedback
+import com.tablet.hid.bluetooth.HidReportDescriptors
 
 class GamepadInputController(
     private val binding: FragmentGamepadBinding,
@@ -46,7 +47,7 @@ class GamepadInputController(
     fun setupButtons() {
         val cfg = viewModel.gamepadConfig.value
         configuredButton(binding.btnA,    BTN_A,    cfg.btnA,    binding.btnA)
-        configuredButton(binding.btnB,    BTN_B,    cfg.btnB,    binding.btnB)
+        minecraftBackButton(binding.btnB, cfg.btnB, binding.btnB)
         configuredButton(binding.btnX,    BTN_X,    cfg.btnX,    binding.btnX)
         configuredButton(binding.btnY,    BTN_Y,    cfg.btnY,    binding.btnY)
         configuredButton(binding.btnLb,   BTN_LB,   cfg.btnLb,   binding.btnLb)
@@ -169,4 +170,35 @@ class GamepadInputController(
             }
         }
     }
+    @Suppress("ClickableViewAccessibility")
+private fun minecraftBackButton(v: View, cfg: ButtonConfig, indicator: View) {
+    v.setOnTouchListener { _, event ->
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                HapticFeedback.vibrate(
+                    v.context,
+                    viewModel.gamepadConfig.value.vibrationIntensity
+                )
+
+                // Escape key: HID keyboard usage 0x29
+                viewModel.sendKeyboardReport(
+                    keyUsages = listOf(0x29)
+                )
+
+                state.setVisualActive(indicator, BTN_B, true)
+                true
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                // Release the keyboard key
+                viewModel.sendKeyboardReport()
+
+                state.setVisualActive(indicator, BTN_B, false)
+                true
+            }
+
+            else -> false
+        }
+    }
+}
 }
