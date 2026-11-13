@@ -76,37 +76,7 @@ class HidViewModel(app: Application) : AndroidViewModel(app) {
     private var mouseCarryY = 0f
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-    while (isActive) {
-        delay(20L)
-
-        synchronized(mouseLock) {
-            val buttons = mouseButtonState
-            val targetDx = mouseTargetDx
-            val targetDy = mouseTargetDy
-
-            mouseEmaDx = 0.8f * targetDx + 0.2f * mouseEmaDx
-            mouseEmaDy = 0.8f * targetDy + 0.2f * mouseEmaDy
-
-            val rawX = mouseEmaDx + mouseCarryX
-            val rawY = mouseEmaDy + mouseCarryY
-
-            val sendDx = rawX.toInt()
-            val sendDy = rawY.toInt()
-
-            mouseCarryX = rawX - sendDx
-            mouseCarryY = rawY - sendDy
-
-            if (sendDx != 0 || sendDy != 0) {
-                mouseTargetDx -= sendDx
-                mouseTargetDy -= sendDy
-
-                sessionLogger?.logMouse(buttons, sendDx, sendDy, 0)
-                hidManager.sendMouseReport(buttons, sendDx, sendDy)
-            }
-        }
-    }
-}
+        viewModel.touchMouseConfig.value.invertScroll
         viewModelScope.launch {
             state.collect { s ->
                 if (s is BleHidManager.State.Connected && _loggingEnabled.value) {
