@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 class HidViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -76,32 +77,36 @@ class HidViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                delay(20L) // 50 Hz
-                val buttons: Int; val targetDx: Float; val targetDy: Float
-                synchronized(mouseLock) {
-                    buttons  = mouseButtonState
-                    targetDx = mouseTargetDx
-                    targetDy = mouseTargetDy
-                }
-                mouseEmaDx = 0.8f * targetDx + 0.2f * mouseEmaDx
-                mouseEmaDy = 0.8f * targetDy + 0.2f * mouseEmaDy
-                val rawX = mouseEmaDx + mouseCarryX
-                val rawY = mouseEmaDy + mouseCarryY
-                val sendDx = rawX.toInt()
-                val sendDy = rawY.toInt()
-                mouseCarryX = rawX - sendDx
-                mouseCarryY = rawY - sendDy
-                if (sendDx != 0 || sendDy != 0) {
-                    synchronized(mouseLock) {
-                        mouseTargetDx -= sendDx
-                        mouseTargetDy -= sendDy
-                    }
-                    sessionLogger?.logMouse(buttons, sendDx, sendDy, 0)
-                    hidManager.sendMouseReport(buttons, sendDx, sendDy)
-                }
+    while (isActive) {
+        delay(20L)
+
+        synchronized(mouseLock) {
+            val buttons = mouseButtonState
+            val targetDx = mouseTargetDx
+            val targetDy = mouseTargetDy
+
+            mouseEmaDx = 0.8f * targetDx + 0.2f * mouseEmaDx
+            mouseEmaDy = 0.8f * targetDy + 0.2f * mouseEmaDy
+
+            val rawX = mouseEmaDx + mouseCarryX
+            val rawY = mouseEmaDy + mouseCarryY
+
+            val sendDx = rawX.toInt()
+            val sendDy = rawY.toInt()
+
+            mouseCarryX = rawX - sendDx
+            mouseCarryY = rawY - sendDy
+
+            if (sendDx != 0 || sendDy != 0) {
+                mouseTargetDx -= sendDx
+                mouseTargetDy -= sendDy
+
+                sessionLogger?.logMouse(buttons, sendDx, sendDy, 0)
+                hidManager.sendMouseReport(buttons, sendDx, sendDy)
             }
         }
+    }
+}
         viewModelScope.launch {
             state.collect { s ->
                 if (s is BleHidManager.State.Connected && _loggingEnabled.value) {
@@ -243,19 +248,32 @@ class HidViewModel(app: Application) : AndroidViewModel(app) {
         refreshHosts()
     }
 
-    fun sendMouseReport(buttons: Int, dx: Float = 0f, dy: Float = 0f, wheel: Int = 0, hwheel: Int = 0) {
-        val buttonsChanged: Boolean
-        synchronized(mouseLock) {
-            buttonsChanged   = buttons != mouseButtonState
-            mouseButtonState = buttons
-            mouseTargetDx   += dx
-            mouseTargetDy   += dy
-        }
-        // Button changes and scroll events bypass the timer for immediate delivery.
-        if (buttonsChanged || wheel != 0 || hwheel != 0) {
-            hidManager.sendMouseReport(buttons, 0, 0, wheel, hwheel)
+    fun sendMouseReportImmediate(
+    buttons: Int,
+    dx: Float = 0f,
+    dy: Float = 0f
+) {
+    synchronized(mouseLock) {
+        val buttonsChanged = buttons != mouseButtonState
+        mouseButtonState = buttons
+
+        // Clear pending movement so it cannot arrive after this report.
+        mouseTargetDx = 0f
+        mouseTargetDy = 0f
+        mouseEmaDx = 0f
+        mouseEmaDy = 0f
+        mouseCarryX = 0f
+        mouseCarryY = 0f
+
+        val sendDx = dx.roundToInt()
+        val sendDy = dy.roundToInt()
+
+        if (buttonsChanged || sendDx != 0 || sendDy != 0) {
+            sessionLogger?.logMouse(buttons, sendDx, sendDy, 0)
+            hidManager.sendMouseReport(buttons, sendDx, sendDy)
         }
     }
+}
 
     fun sendGamepadReport(
         leftX: Int = 0, leftY: Int = 0,
